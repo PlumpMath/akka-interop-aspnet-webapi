@@ -1,9 +1,11 @@
 ﻿using Microsoft.Owin.Hosting;
 using Microsoft.Owin.Hosting.Tracing;
+using Newtonsoft.Json.Serialization;
 using Owin;
 using Serilog;
 using System;
 using System.IO;
+using System.Net.Http.Formatting;
 using System.Threading;
 using System.Web.Http;
 
@@ -15,14 +17,15 @@ namespace Server
 	static class Program
 	{
 		/// <summary>
+		///		The default port on which to listen for requests.
+		/// </summary>
+		const int DefaultListenPort = 19123;
+
+		/// <summary>
 		///		The main program entry-point.
 		/// </summary>
 		static void Main()
 		{
-			int? port = GetListenPort();
-			if (port == null)
-				return;
-
 			SynchronizationContext.SetSynchronizationContext(
 				new SynchronizationContext()
 			);
@@ -30,9 +33,10 @@ namespace Server
 			ConfigureLogging();
 			try
 			{
-				string listenUri = $"http://localhost:{port.Value}";
-				Log.Information("Starting server on {ListenUri}...", listenUri);
+				int port = GetListenPort() ?? DefaultListenPort;
+				string listenUri = $"http://localhost:{port}";
 
+				Log.Information("Starting server on {ListenUri}...", listenUri);
 				StartOptions hostOptions = BuildHostOptions(listenUri);
 				using (WebApp.Start(hostOptions, ServerConfiguration))
 				{
@@ -82,8 +86,20 @@ namespace Server
 				throw new ArgumentNullException("app");
 
 			HttpConfiguration webApiConfiguration = new HttpConfiguration();
-			webApiConfiguration
-				.MapHttpAttributeRoutes();
+
+			// JSON only (to simplify interop).
+			webApiConfiguration.Formatters.Clear();
+			webApiConfiguration.Formatters.Add(
+				new JsonMediaTypeFormatter
+				{
+					Indent = true,
+					SerializerSettings =
+					{
+						ContractResolver = new CamelCasePropertyNamesContractResolver()
+					}
+				}
+			);
+			webApiConfiguration.MapHttpAttributeRoutes();
 
 			app.UseWebApi(webApiConfiguration);
 		}
