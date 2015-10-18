@@ -19,7 +19,7 @@ object Application extends App {
   // IDEA reckons this import isn't required, but Jackson breaks at runtime without it.
   // I don't really understand IDEA, Scala, OR Jackson well enough yet to understand why this is the case, but I'm keen to figure it out.
   import TypeManifests._
-  
+
   // Implicits required by Akka Streams / Akka HTTP
   implicit val clientSystem = ActorSystem("HttpClient")
   implicit val clientFlowMaterializer = ActorMaterializer()
@@ -37,7 +37,7 @@ object Application extends App {
         println("Initiating stream read / parse...")
         deserializeBody(response) andThen {
           case Success(greeting) => println("Deserialised body: " + greeting)
-          case Failure(error) =>    println(s"Read / deserialise failed ($error)")
+          case Failure(error)    => println(s"Read / deserialise failed ($error)")
         } andThen {
           case _ =>
             println("System shutdown because it's time...")
@@ -55,7 +55,7 @@ object Application extends App {
                 Unmarshal(response.entity).to[String]
               )
             }
-          case None =>
+          case None => println("No further information available (response's body was empty).")
         }
       }
   } recover {
@@ -78,7 +78,8 @@ object Application extends App {
    * @return A `Future[TBody]` representing asynchronous deserialisation of the response body.
    * @note Should probably be using the Unmarshal stuff here; refactor once we figure out all the inter-related bits and pieces required to do so.
    */
-  def deserializeBody[TBody](response: HttpResponse)(implicit materializer: ActorMaterializer, bodyTypeManifest: Manifest[TBody]): Future[TBody] = {
+  def deserializeBody[TBody](response: HttpResponse)
+    (implicit materializer: ActorMaterializer, bodyTypeManifest: Manifest[TBody]): Future[TBody] = {
     response.entity.dataBytes.runWith(Sink.head)(materializer).map { bytes =>
       println("Reading...")
       val responseBytes = bytes.toByteBuffer.array
@@ -93,14 +94,15 @@ object Application extends App {
    * @return A `Future[Unit]` representing the asynchronous shutdown process.
    * @note This only initiates the shutdown process (you'll still need to call actorSystem.awaitTermination).
    */
-  def shutdown()(implicit actorSystem: ActorSystem): Future[Unit] = {
+  def shutdown()
+    (implicit actorSystem: ActorSystem): Future[Unit] = {
     Http(actorSystem).shutdownAllConnectionPools() andThen {
       case Failure(error) =>
         println("An error occurred while shutting down HTTP connection pools:")
         println(error)
-      case _ => println("All HTTP connection pools have been closed.")
-    } andThen {
-      case _ => actorSystem.shutdown()
+      case wel => println("All HTTP connection pools have been closed.")
+    } andThen { case always =>
+      actorSystem.shutdown()
     }
   }
 
