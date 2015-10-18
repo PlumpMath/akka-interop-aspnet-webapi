@@ -17,5 +17,3 @@ val akkaDependencies = Seq(
   "com.typesafe.akka" %% "akka-stream-experimental" % akkaStreamsVersion
 )
 libraryDependencies ++= akkaDependencies
-
-libraryDependencies += "com.lambdaworks" %% "jacks" % "2.3.3"
