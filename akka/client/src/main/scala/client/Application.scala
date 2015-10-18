@@ -2,11 +2,12 @@ package client // Only bothering with a package for this example because Jackson
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import akka.http.scaladsl.unmarshalling.Unmarshal
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.{HttpEntity, HttpRequest, HttpResponse}
+import akka.http.scaladsl.unmarshalling.{Unmarshaller, Unmarshal}
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
-import com.lambdaworks.jacks.JacksMapper
+
+import spray.json.DefaultJsonProtocol
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -16,10 +17,6 @@ import scala.util.{Failure, Success}
  * @note This could all be a lot cleaner, but for the first attempt I'd like to see all the logic in one place so I can fit it all in my head :)
  */
 object Application extends App {
-  // IDEA reckons this import isn't required, but Jackson breaks at runtime without it.
-  // I don't really understand IDEA, Scala, OR Jackson well enough yet to understand why this is the case, but I'm keen to figure it out.
-  import TypeManifests._
-
   // Implicits required by Akka Streams / Akka HTTP
   implicit val clientSystem = ActorSystem("HttpClient")
   implicit val clientFlowMaterializer = ActorMaterializer()
@@ -35,7 +32,9 @@ object Application extends App {
         println("Response's HTTP status code indicates success.")
 
         println("Initiating stream read / parse...")
-        deserializeBody(response) andThen {
+        import ApplicationJsonProtocol._
+
+        Unmarshal(response.entity).to[Greeting] andThen {
           case Success(greeting) => println("Deserialised body: " + greeting)
           case Failure(error)    => println(s"Read / deserialise failed ($error)")
         } andThen {
@@ -70,26 +69,6 @@ object Application extends App {
   println("System shutdown complete.")
 
   /**
-   * Deserialise the body of the supplied `HttpResponse` as JSON.
-   * @param response The `HttpResponse`.
-   * @param materializer The `ActorMaterializer` used to build the Akka Streams data flow that processes the body content.
-   * @param bodyTypeManifest A manifest reference required by Jackson so it knows what `TBody` is.
-   * @tparam TBody The type into which the body should be deserialised.
-   * @return A `Future[TBody]` representing asynchronous deserialisation of the response body.
-   * @note Should probably be using the Unmarshal stuff here; refactor once we figure out all the inter-related bits and pieces required to do so.
-   */
-  def deserializeBody[TBody](response: HttpResponse)
-    (implicit materializer: ActorMaterializer, bodyTypeManifest: Manifest[TBody]): Future[TBody] = {
-    response.entity.dataBytes.runWith(Sink.head)(materializer).map { bytes =>
-      println("Reading...")
-      val responseBytes = bytes.toByteBuffer.array
-
-      println("Parsing...")
-      JacksMapper.readValue[TBody](responseBytes)
-    }
-  }
-
-  /**
    * Cleanly shut down the HTTP connection pool and actor system.
    * @return A `Future[Unit]` representing the asynchronous shutdown process.
    * @note This only initiates the shutdown process (you'll still need to call actorSystem.awaitTermination).
@@ -114,14 +93,19 @@ object Application extends App {
   case class Greeting(name: String, greeting: String)
 
   /**
-   * Implicits for the Scala `Manifest`s representing well-known types (required by Jackson serialisation).
+   * Custom JSON protocol for well-known data contracts used by this example.
    */
-  object TypeManifests {
+  private object ApplicationJsonProtocol extends DefaultJsonProtocol with SprayJsonSupport {
     /**
-     * Manifest for `Greeting`.
-     * @note I suspect I may be missing a cleaner way to configure Jackson when writing generic types.
-     *       Maybe consider Spray's JSON support, too (although it's uglier).
+     * Custom JSON format for `Greeting`.
      */
-    implicit val greetingManifest: Manifest[Greeting] = Manifest.classType(classOf[Greeting])
+    implicit val greetingFormat = jsonFormat2(Greeting)
+
+    /**
+     * Custom unmarshaller for `Greeting`.
+     * @note Seems like a major PITA to have to declare both the format and the unmarshaller for every body type.
+     *       Surely there's a convenience shortcut somewhere?
+     */
+    implicit val greetingUnmarshaller: Unmarshaller[HttpEntity, Greeting] = sprayJsonUnmarshaller[Greeting]
   }
 }
