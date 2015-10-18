@@ -2,12 +2,10 @@ package client // Only bothering with a package for this example because Jackson
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import akka.http.scaladsl.model.{HttpEntity, HttpRequest, HttpResponse}
-import akka.http.scaladsl.unmarshalling.{Unmarshaller, Unmarshal}
+import akka.http.scaladsl.model.HttpRequest
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
-
-import spray.json.DefaultJsonProtocol
+import models.Greeting
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -32,6 +30,7 @@ object Application extends App {
         println("Response's HTTP status code indicates success.")
 
         println("Initiating stream read / parse...")
+
         import ApplicationJsonProtocol._
 
         Unmarshal(response.entity).to[Greeting] andThen {
@@ -83,29 +82,5 @@ object Application extends App {
     } andThen { case always =>
       actorSystem.shutdown()
     }
-  }
-
-  /**
-   * Represents a greeting from ASP.NET web API.
-   * @param name The name of the caller.
-   * @param greeting A caller-specific greeting.
-   */
-  case class Greeting(name: String, greeting: String)
-
-  /**
-   * Custom JSON protocol for well-known data contracts used by this example.
-   */
-  private object ApplicationJsonProtocol extends DefaultJsonProtocol with SprayJsonSupport {
-    /**
-     * Custom JSON format for `Greeting`.
-     */
-    implicit val greetingFormat = jsonFormat2(Greeting)
-
-    /**
-     * Custom unmarshaller for `Greeting`.
-     * @note Seems like a major PITA to have to declare both the format and the unmarshaller for every body type.
-     *       Surely there's a convenience shortcut somewhere?
-     */
-    implicit val greetingUnmarshaller: Unmarshaller[HttpEntity, Greeting] = sprayJsonUnmarshaller[Greeting]
   }
 }
