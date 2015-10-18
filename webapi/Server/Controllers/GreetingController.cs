@@ -35,7 +35,7 @@ namespace AkkaInterop.AspNetWebApi.Server.Controllers
 				new GreetingModel
 				{
 					Name = name,
-					Greeting = $"Hello, {name}."
+					Greeting = $"Hello {name} (greetings from ASP.NET WebAPI)."
 				}
 			);
 		}
